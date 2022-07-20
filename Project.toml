@@ -1,0 +1,9 @@
+name = "FluxTest"
+uuid = "0e3f185f-dd79-4b44-987d-50aabbc31398"
+authors = ["iainquayle <36175014+iainquayle@users.noreply.github.com>"]
+version = "0.1.0"
+
+[deps]
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
+MLDatasets = "eb30cadb-4394-5ae3-aed4-317e484a6458"
