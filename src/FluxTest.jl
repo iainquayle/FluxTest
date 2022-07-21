@@ -17,26 +17,51 @@ end
 
 function inception_mod_a(imgs_in, imgs_out)
 	long_chain = Chain(
-		Conv((3, 3), imgs_in=>imgs_out, relu),
-		Conv((3, 3), imgs_out=>imgs_out, relu)
+		Conv((3, 3), imgs_in=>imgs_out, relu, pad = SamePad()),
+		Conv((3, 3), imgs_out=>imgs_out, relu, pad = SamePad()),
+		Conv((1, 1), imgs_out=>imgs_out, relu, pad = SamePad()),
 	)
 	short_chain = Chain(
-		Conv((1, 1), imgs_in=>imgs_out, relu)
+		Conv((1, 1), imgs_in=>imgs_out, relu, pad = SamePad())
 	)
-	return Parallel(long_chain, short_chain)
+	return Parallel(+; long_chain, short_chain)
 end
 
-function create_model()
-	#TODO: currently numbers will mis match, consider creating automatic generationg for numbers and layers
+function down_sample_mod_a(imgs_in)
+	pool = MaxPool((2, 2))
+	conv = Conv((2, 2), imgs_in=>imgs_in, relu, pad = SamePad(), stride = (2, 2))
+	return Parallel(+; pool, conv)
+end
+
+function down_sample_odd(imgs)
+	return Conv((3, 3), imgs=>imgs, relu, stride = (2, 2))
+end
+
+function create_inception()
+
 	return Chain(
-		Conv((5, 5), 1=>6, relu), #SamePad()
-		#inception_mod_a(6, 18),
-		MaxPool((2, 2)), #14
-		#inception_mod_a(18, 24),
-		Conv((5, 5), 6=>16, relu),
-		MaxPool((2, 2)), #7
+		Conv((5,5), 1=>8, relu), #24
+		down_sample_mod_a(8), #12 #TODO: this is creating an output of 12x12x8 vs 12x12x16
+		inception_mod_a(16, 16), #12
+		#down_sample_mod_a(16), #6
+		#inception_mod_a(32, 16), #6
+		#down_sample_mod_a(32), #3
 		Flux.flatten,
-		Dense(256=>128, relu),
+		Dense(3*3*64=>1024, relu),
+		Dense(1024=>256, relu),
+		Dense(256=>10),
+	)
+end
+
+function create_lenet()
+	#TODO: switch back to no padding
+	return Chain(
+		Conv((5, 5), 1=>6, relu, pad = SamePad()), #24 
+		MaxPool((2, 2)), #12
+		Conv((5, 5), 6=>16, relu, pad = SamePad()), #8
+		MaxPool((2, 2)), #4
+		Flux.flatten,
+		Dense(7*7*16=>128, relu),
 		Dense(128=>64, relu),
 		Dense(64=>10),
 	)
@@ -63,7 +88,7 @@ function train()
 	@info "train count: $(train_loader.nobs), test count: $(test_loader.nobs)"
 
 	@info "creating model"
-	model = create_model() |> gpu
+	model = create_inception() |> gpu
 	@info "model params $(sum(length, Flux.params(model)))"
 
 	parameters = Flux.params(model)
