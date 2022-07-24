@@ -15,40 +15,36 @@ function create_data_loaders()
 	return train, test	
 end
 
-function inception_mod_a(imgs_in, imgs_out)
+cat_channels(xy...) = cat(xy...; dims = Val(3))
+
+function conv_module_a(imgs_in, imgs_out)
+	return Chain(
+		Conv((3, 3), imgs_in=>imgs_out, relu, pad=SamePad()),
+		Conv((3, 3), imgs_out=>imgs_out, relu, pad=SamePad()),
+	) 	
+end
+
+function shell_downsample(conv_mod, imgs_in_short, imgs_out_short, imgs_in_long, imgs_out_long)
+	short_conv = Conv((2, 2), imgs_in_short=>imgs_out_short, relu, pad = SamePad(), stride = (2, 2))
 	long_chain = Chain(
-		Conv((3, 3), imgs_in=>imgs_out, relu, pad = SamePad()),
-		Conv((3, 3), imgs_out=>imgs_out, relu, pad = SamePad()),
-		Conv((1, 1), imgs_out=>imgs_out, relu, pad = SamePad()),
+		conv_mod,
+		Conv((2, 2), imgs_in_long=>imgs_out_long, relu, pad = SamePad(), stride = (2, 2)),
 	)
-	short_chain = Chain(
-		Conv((1, 1), imgs_in=>imgs_out, relu, pad = SamePad())
-	)
-	return Parallel(+; long_chain, short_chain)
-end
-
-function down_sample_mod_a(imgs_in)
-	pool = MaxPool((2, 2))
-	conv = Conv((2, 2), imgs_in=>imgs_in, relu, pad = SamePad(), stride = (2, 2))
-	return Parallel(+; pool, conv)
-end
-
-function down_sample_odd(imgs)
-	return Conv((3, 3), imgs=>imgs, relu, stride = (2, 2))
+	return Parallel(cat_channels, short_conv, long_chain)
 end
 
 function create_inception()
-
 	return Chain(
-		Conv((5,5), 1=>8, relu), #24
-		down_sample_mod_a(8), #12 #TODO: this is creating an output of 12x12x8 vs 12x12x16
-		inception_mod_a(16, 16), #12
-		#down_sample_mod_a(16), #6
-		#inception_mod_a(32, 16), #6
-		#down_sample_mod_a(32), #3
+		Conv((5,5), 1=>8, relu), #24, 8
+		shell_downsample(conv_module_a(8, 8), 8, 8, 8, 8),#12, 16
+		Dropout(0.25),
+		shell_downsample(conv_module_a(16, 16), 16, 16, 16, 16),#6, 32
+		shell_downsample(conv_module_a(32, 32), 32, 32, 32, 32),#3, 64
+		Dropout(0.25),
 		Flux.flatten,
 		Dense(3*3*64=>1024, relu),
 		Dense(1024=>256, relu),
+		Dropout(0.25),
 		Dense(256=>10),
 	)
 end
@@ -56,12 +52,12 @@ end
 function create_lenet()
 	#TODO: switch back to no padding
 	return Chain(
-		Conv((5, 5), 1=>6, relu, pad = SamePad()), #24 
+		Conv((5, 5), 1=>6, relu), #24 
 		MaxPool((2, 2)), #12
-		Conv((5, 5), 6=>16, relu, pad = SamePad()), #8
+		Conv((5, 5), 6=>16, relu), #8
 		MaxPool((2, 2)), #4
 		Flux.flatten,
-		Dense(7*7*16=>128, relu),
+		Dense(256=>128, relu),
 		Dense(128=>64, relu),
 		Dense(64=>10),
 	)
@@ -88,10 +84,11 @@ function train()
 	@info "train count: $(train_loader.nobs), test count: $(test_loader.nobs)"
 
 	@info "creating model"
-	model = create_inception() |> gpu
+	model = create_lenet() |> gpu
 	@info "model params $(sum(length, Flux.params(model)))"
 
 	parameters = Flux.params(model)
+	#optimizer = ADAMW(0.003, (.85, .99), 0.01)
 	optimizer = ADAM(0.0003)
 
 	@info "beginning training"
@@ -118,4 +115,5 @@ end
 CUDA.versioninfo()
 train()
 
+#	println(size(Flux.params(shell_downsample(conv_module_a(8, 8), 8, 8, 8, 8))[:,:,:,:]))#12, 16
 end # module
