@@ -36,16 +36,16 @@ end
 function create_inception()
 	return Chain(
 		Conv((5,5), 1=>8, relu), #24, 8
-		shell_downsample(conv_module_a(8, 8), 8, 8, 8, 8),#12, 16
+		shell_downsample(conv_module_a(8, 8), 8, 4, 8, 12),#12, 16
 		Dropout(0.25),
-		shell_downsample(conv_module_a(16, 16), 16, 16, 16, 16),#6, 32
-		shell_downsample(conv_module_a(32, 32), 32, 32, 32, 32),#3, 64
+		shell_downsample(conv_module_a(16, 16), 16, 6, 16, 26),#6, 32
+		shell_downsample(conv_module_a(32, 32), 32, 8, 32, 56),#3, 64
 		Dropout(0.25),
 		Flux.flatten,
-		Dense(3*3*64=>1024, relu),
-		Dense(1024=>256, relu),
+		Dense(3*3*64=>512, relu),
+		Dense(512=>128, relu),
 		Dropout(0.25),
-		Dense(256=>10),
+		Dense(128=>10),
 	)
 end
 
@@ -84,7 +84,7 @@ function train()
 	@info "train count: $(train_loader.nobs), test count: $(test_loader.nobs)"
 
 	@info "creating model"
-	model = create_lenet() |> gpu
+	model = create_inception() |> gpu
 	@info "model params $(sum(length, Flux.params(model)))"
 
 	parameters = Flux.params(model)
